@@ -39,7 +39,7 @@ SET autocommit = FALSE;
 
 ## MySQL 高级特性
 
-### MySQL 架构
+### MySQL的配置
 #### 1. 默认字符集
 在MySQL8.0中，默认字符集是utf8mb4，意味着数据库中能直接存储中文等复杂字符信息。而在MySQL5.7中，默认字符集是latin1，这个字符集不包含中文，假如我们尝试插入中文信息，在MySQL5.7中会出现错误。
 为了解决MySQL5.7默认不支持中文的问题，第一个方法，我们可以在后端将中文信息使用**Base64编码**将信息转换为只用latin1中的字符就可以表示的形式再存入数据库。
@@ -140,6 +140,61 @@ SHOW VARIABLES LIKE 'datadir'; # 查看数据库文件路径
 和Innodb引擎一样，数据库文件夹也是存放在`/var/lib/mysql/`这个路径下的，和Innobd相比，在MySQL5.7版本下，除了.frm文件外，另外的两个文件是`table_name.MYD`和`table_name.MYI`，实际上这两个文件存储的信息就等于在Innodb中的.ibd文件
 ![Alt text](MySQL_images/myisam5.7.png)
 而在MySQL8.0版本下，数据表依旧是分开存储的，.MYD和.MYI保持不变，而.frm文件则变为了.sdi
+
+#### 7. Mysql的配置文件
+
+配置文件格式
+在MySQL的配置文件中，启动选项被划分为若干组，每一个组有一个组名，用中括号`[]`括起来，如下所示
+```properties
+[server]
+# some properties
+
+[mysqld]
+# some properties
+
+[mysqld_safe]
+# some properties
+
+[client]
+# some properties
+
+[mysql]
+# some properties
+
+[mysqladmin]
+# some properties
+```
+每一个propertiy有两种格式，分别是
+```properties
+[server]
+option1             # only key
+option2=value2      # key-value format
+```
+#### 8.MySQL的用户与角色管理
+
+### MySQL 架构
+
+#### 1. Mysql的整体架构
+MySQL是典型的CS架构，客户端向服务器进程发送一段文本（SQL语句），服务器处理后再向客户端发送一段文本（处理结果），我们以查询请求为例，具体流程如下图所示：
+![Alt text](MySQL_images/mysql_process.png)
+下面这张图能很好的展示展开后的MySQL5.7的架构
+![Alt text](MySQL_images/MySQL_Architecture.png)
+* `Connectors`: 表示MySQL服务器以外的客户端程序（与各个语言相关，图JDBC是Java用来链接服务器的库）
+* `Services & Utilities`: 基础服务组件
+* `Connection Pool`: 提供了多个用于客户端与服务器端进行交互的线程
+* `SQL Interface`: 接受SQL指令并且返回查询结果的
+* `Parser`: 用于解析SQL Interface传过来的SQL指令，包括：语法解析、语义解析，最终生成语法树
+* `Optimizer`: **核心组件**，对SQL进行优化，并生成一个`执行计划`
+* `Cache`: 以Key-Value的形式缓存查询结果 **MySQL8.0已废除**
+* `Pluggable Storage Engines`: 与操作系统的文件系统进行交互，真正在文件系统中进行数据读取的实际上是Storage Engines
+* `File System`: 操作系统提供的文件系统
+
+整体上，MySQL分为**连接层**，**服务层**和**引擎层**，连接层包括Connection Pool，服务层包括SQL Interface、Parser、Optimizer和Cache，引擎层指的是Pluggable Storage Engines。
+
+一个SQL语句的大致的执行顺序是怎么样的呢？
+`1.在客户端使用如JDBC等库发送SQL语句到MySQL服务器中` -> `2.在Connection Pool中创建线程，建立连接` -> `3.调用相关的SQL Interface` -> `4.在Cache中查询是否有已经存在的一摸一样的查询结果（deprecated in Mysql8.0）` -> `5.Parser解析SQL语句，生成语法树` -> `6.在Optimizer对SQL进行优化（逻辑上与物理上（使用索引））` -> `7.调用Storage Engine的API进行查找` -> `8.在文件系统进行查找` -> `9.将查询结果缓存在Cache中（deprecated in Mysql8.0）` -> `10.将数据返回到客户端`
+
+#### 2. SQL的执行流程
 
 ### MySQL 索引及调优
 

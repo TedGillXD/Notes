@@ -516,9 +516,12 @@ B树的每一个阶段最多可能包括M个子节点，其中M称为B树的阶�
         | `PAGE_BTR_SEG_LEAF` | `10B` | B+树叶子段的头部信息，仅在B+树的Root页中定义 |
         | `PAGE_BTR_SEG_TOP` | `10B` | B+树非叶子段的头部信息，仅在B+树的Root页中定义 |
 
-    8. 每一个用户数据行中记录的额外信息
-        1. 边长字段长度列表
+    8. 对于**COMPACT**行格式中每一个用户数据行中记录的额外信息
+        在Compact行格式下，一行数据可以被分为**记录的额外信息**和**记录的真实数据**两个部分，记录的额外信息包括以下的三个:
+        1. 变长字段长度列表
+            在MySQL中支持一些边长的数据类型，比如`VARCHAR(M)`，`VARBINARY(M)`，`TEXT`，`BLOB`类型，这些数据类型修饰列称为**变长字段**，由于这些变长字段中存储了多少字节的数据不是固定的，所以我们在存储真实数据的时候需要顺便把这些数据占用的字节数也存起来，因而形成了变长字段长度列表。
         2. NULL值列表
+            Compact行格式会把可以为NULL的列统一管理起来，存在一个标记为NNLL值列表中，如果表中没有允许存储NULL的列，则NULL值列表也就不存在了。
         3. 记录头信息(5 bytes)
             在记录头信息中，包括了以下的字段：
             | 名称 | 大小 | 描述 |
@@ -532,12 +535,274 @@ B树的每一个阶段最多可能包括M个子节点，其中M称为B树的阶�
 
             **为什么被删除的记录是修改delete_mask而不是真的去删除这条记录呢？**
             这是因为移除这一条记录需要将其他的记录进行**重新排序，从而导致性能消耗**。这些被删除的记录都会组成一个所谓的**垃圾链表**，在这个链表中的记录占用的空间称之为**可重用空间**，之后如果有新纪录插入到表中的话，可能把这些被删除记录占用的空间覆盖掉。
+       
+        在记录的真实数据中，除了我们自己定义的列的数据外，还会有三个隐藏列:
+        | 列名 | 是否必须 | 占用空间 | 描述 |
+        | ---- | ------- | ------- | ---- |
+        | `row_id` | 否 | `6B` | 行ID，唯一表示一条记录 |
+        | `transaction_id` | 是 | `6B` | 事务ID |
+        | `roll_pointer` | 是 | `7B` | 回滚指针 |
 
 
+    9. **Dynamic**和**Compressed**行格式
+        在介绍Compressed和Dynamic行格式之前，我们首先需要了解以下什么是MySQL的行溢出，在MySQL中，有些变长字段的长度可以超过页面大小，比如VARCHAR(M)类型，这个类型下，VARCHAR字段最多占用的字节数是65535，也就是约等于64KB，这远远比我们16KB的页面大小要大，要存储下所有的信息，不同的行格式有着不同的格式。对于上面提到的COMPACT行格式来说，它会尽可能存储下数据，若是存不下，则使用一个20字节的指针指向剩余数据的数据页，这样子就形成了一个指针。
+        而对于Compressed和Dynamic行格式而言，对于存放在BLOB中的数据采用了完全的行溢出方式。**在数据页中只存放20字节的指针，实际的数据都存放在Off Page中(溢出页)**
+        而Dynamic和Compressed区别则是Compressed行格式会对数据进行`zlib`算法压缩，因此对BLOB、TEXT、VARCHAR这种大数据能更有效的存储。
 
-在一个数据页中，所存放的数据行是通过链表组织起来的，但是折又会存在一个问题，就是即使我们的链表是有序的，但我们无法使用二分查找加速搜索过程。实际上，在每一个页中都存在一个页目录，使用数组结构，用于快速定位元素
+    10. **Redundant**行格式
+        Redundant行格式和Compact行格式非常相似，唯一的不同就是没有NULL值列表，且记录的变长字段长度列表变为字段长度偏移列表。
 
+3. 区、段与碎片区
+    1. 为什么要有区
+        对于磁盘而言，除了读取速度慢的问题，还有磁盘寻道也会占用一定的时间，但磁盘寻道时间是可以通过合理安排数据存放位置减少的，比如**将多个数据页连续存放在磁盘中**，这样在读取多个页的时候寻道时间便减少了。
+        而区的定义就是为了让数据页的存放不仅仅实在结构层面上连续，更是在物理层面上连续。**一个区就是在物理位置上连续的`64个页`**，因为InnoDB中一个页的大小为16KB，所以一个区的大小就为$64 * 16KB = 1MB$。
+        当表数据量大时，为某一个索引分配空间时就不按照页作为分配单位了，而是**按照区为分配单位**，甚至是当表中数据特别多时，可以一次性分配多个连续的区！
+    2. 为什么要有段
+        对于范围查询，实际上是对B+树的叶子节点进行顺序扫描，如果我们不区分叶子节点和非叶子节点，在进行范围扫描的过程中就可能浪费一部分的I/O时间了。所以InnoDB对B+树的`叶子节点`和`非叶子节点`进行了区别对待，就是叶子节点有自己独特的区，而非叶子节点也有。而**存放叶子节点的区的集合就是`段`(`segment`)**，**存放非叶子节点的区的集合也是一个`段`**。也就是一个索引会生成2个段，一个`叶子节点段`，一个`非叶子节点段`。
+        除了上述这两种段以外，InnoDB中还有为存储一些特殊的数据而定义的段，比如`回滚段`。
+        在InnoDB中，段的管理是由引擎自身所完成的，DBA无法对段进行管理。
+        **段实际上并不是一个物理上连续的区域，而是概念上的连续！它是由`若干个零散的页面`和`一些完整的区`组成**
+    3. 为什么要有碎片区
+        为了解决使用区存在的潜在空间浪费的问题，我们需要使用碎片区来解决。
+        为了考虑以完整的区为单位分配给某个段对于`数据量较小`的表产生的空间浪费的情况，InnoDB提出了一个`碎片(fragment)区`的概念。**在一个碎片区中，并不是所有页都属于某一个段而存在的，而是其中部分的页属于段A，另一部分页属于段B这种形式。**
+        **碎片区直属于表空间，并不属于任何一个段！**
+        在存在碎片区的情况下，为某个段分配存储空间的策略是这样的: 
+        * 在刚开始向表中插入数据时，段是从某个碎片区开始以单个页面为单位来分配存储空间的。
+        * 当某个段已经占用了`32个碎片区页面`后，就会申请完整的区为单位来分配存储空间。
+    4. 区的分类
+        区大体上可以分为4中类型：
+        * `空闲的区(FREE)`: 目前还没有被使用的区
+        * `有剩余空间的碎片区(FREE_FRAG)`: 表示碎片区中还有可用的页面
+        * `没有剩余空间的碎片区(FULL_FRAG)`: 表示碎片区中的所有页面都被使用
+        * `附属于某一个段的区(FSEG)`: 每一个索引都可以分为叶子节点段和非叶子节点段
+        
+        其中前三种区属于独立的，直属与表空间。而处于`FSEG`状态的区是附属于某一个段的。
 
+4. 表空间
+    表空间可以看作是InnoDB存储引逻辑架构的最高层，所有的数据都存放在表空间中。
+    表空间实际上是一种`逻辑容器`，表空间存储的对象是段，在一个表空间中可以有一个或多个段，但一个段直属与一个表空间。
+    表空间数据库由一个或多个表空间组成，表空间管理上可以分为`系统表空间(System Tablespace)`、`独立表空间(File-per-table Tablespace)`、`撤销表空间(Undo Tablespace)`、`临时表空间(Temporary Tablespace)`。
+    1. 独立表空间
+        即每一张表有一个独立的表空间，也就是数据和索引信息都会保存在自己的表空间中。独立的表空间(即: 单表)可以在不同的数据库中进行**迁移**。
+        **真实表空间对应的文件大小**
+        对于最初是的表空间.ibd文件，其只占用了`96KB`的空间(MySQL5.7中，在8.0中是7个页面大小，这是因为8.0中的.frm文件和.ibd文件内容合并了)，相当于6个页面大小，这是因为一开始我们的表中并没有数据。随着表中的数据增多，表空间对应的文件也会变大。
+    2. 系统表空间
+        系统表空间与独立表空间基本类似，但由于整个MySQL进程只有一个系统表空间，在系统表空间中会额外记录一些信息，这部分是独立表空间没有的。
+
+#### 索引的创建与设计原则
+1. 索引的分类
+    MySQL的索引包括`普通索引`，`唯一性索引`，`全文索引`，`多列索引`和`空间索引`等。
+    * 从**功能逻辑**上分类，索引主要有4种，分别是`普通索引`，`唯一索引`，`逐渐索引`，`全文索引`。
+    * 从**物理实现方式**上分类，索引可以分为两种，分别是`聚簇索引`和`非聚簇索引`。
+    * 按照**作用字段个数**进行划分，可以划分为`单列索引`和`联合索引`。
+
+    1. **普通索引**
+        创建普通索引时，不添加任何限制条件，只是用于提高查询效率。这类索引能创建在**任何数据类型**上，其值是否非空或者唯一要看字段本身的约束。
+    2. **唯一性索引**
+        使用`UNIQUE参数`可以将索引设置为唯一性索引，在创建时，限制该索引的值是必须是唯一的，但允许有空值。**一张数据表中可以有多个唯一索引**
+    3. **主键索引**
+        主键索引就是一种特殊的唯一性索引，**不允许有空值**，且**一张数据表中最多只有一个主键索引**。
+    4. **单列索引**
+        在表中的单个字段上创建的索引。单列索引只对指定字段进行索引。单列索引可以是普通索引，也可以是唯一性索引，还可以是全文索引。只要保证索引只针对一个字段创建的就可以了。**一个表中可以存在多个单列索引。**
+    5. **多列(组合，联合)索引**
+        多列索引是在表的**多个字段组合**上创建的一个索引，该索引指向创建时对应的多个字段，可以通过这几个字段进行查询，**但是只有查询条件中使用了这些字段中的第一个字段时才会被使用**
+    6. **全文索引**
+        是目前`搜索引擎`使用的一种关键的检索技术，它能够通过`分词技术`等多种算法只能分析出文本文字中关键词的频率和重要性。
+
+2. 创建索引
+    在创建表时添加索引: `CREATE TABLE`中指定索引列
+    在已经存在的表中添加索引: `ALTER TABLE`中指定索引
+    1. 创建表时建立索引
+        隐式的构建索引的例子: 
+        ```sql
+        CREATE TABLE departments (
+            deptID BIGINT PRIMARY KEY AUTO_INCREMENT,   # 默认情况下主键会作为索引，作为主键索引
+            deptName VARCHAR(20) NOT NULL
+        );
+
+        CREATE TABLE employees (
+            employeeID BIGINT PRIMARY KEY AUTO_INCREMENT,   # 默认情况下主键会作为索引，作为主键索引
+            employeeName VARCHAR(20) UNIQUE,            # 声明UNIQUE之后会使用这个列的数据生成唯一性索引
+            deptID BIGINT,
+            CONSTRAINT empDeptIdFK FOREIGN KEY (deptID) REFERENCES departments(deptID)  # 外键同样会生成一个索引
+        );
+        ```
+        显式的构建索引:
+        ```sql
+        # 基本的语法如下
+        CREATE TABLE table_name [column_name data_type] [UNIQUE | FULLTEXT | SPATIAL] [INDEX | KEY] [index_name] (column_name [lenght]) [ASC | DESC];
+        ```
+        * `UNIQUE`、`FULLTEXT`、`SPATIAL`可选参数，分别表示唯一索引、全文索引和空间索引
+        * `INDEX`和`KEY`是同义词，用来指定创建索引
+        * `index_name`指定索引的名字，可选参数，可以不指定，默认是column_name作为索引名称
+        * `column_name`是需要创建索引的列的字段，必须是表中已经定义好的列
+        * `length`可选参数，表示索引的长度，只有字符串类型的字段才能指定索引长度
+        * `ASC`和`DESC`指定升序或者降序地存储索引值
+        1. 显式创建普通索引
+            举个创建普通索引的例子:
+            ```sql
+            CREATE TABLE book (
+                bookID BIGINT,
+                bookName VARCHAR(100),
+                authors VARCHAR(100),
+                info VARCHAR(100),
+                comment VARCHAR(100),
+                publicationTime YEAR,
+                # 下面是声明索引
+                INDEX(publicationTime)  # 根据publicationTime作为索引列创建普通索引
+            );
+            ```
+            ![Alt text](MySQL_images/test_normal_index.png)
+        2. 显式创建唯一索引
+            举个创建唯一索引的例子:
+            ```sql
+            CREATE TABLE book (
+                bookID BIGINT,
+                bookName VARCHAR(100),
+                authors VARCHAR(100),
+                info VARCHAR(100),
+                comment VARCHAR(100),
+                publicationTime YEAR,
+                # 下面是声明索引
+                # 需要注意的是，创建唯一索引后comment列就有UNIQUE约束了！
+                UNIQUE INDEX unique_comment_idx(comment)  # 根据comment作为索引列创建唯一索引
+            );
+            ```
+            ![Alt text](MySQL_images/test_unique_index.png)
+        3. 显式创建主键索引(通过定义主键约束的方式)
+            和隐式的一致，并没有额外的显式创建主键索引的方法
+        4. 显式创建联合索引
+            举个创建联合索引的例子:
+            ```sql
+            CREATE TABLE book (
+                bookID BIGINT,
+                bookName VARCHAR(100),
+                authors VARCHAR(100),
+                info VARCHAR(100),
+                comment VARCHAR(100),
+                publicationTime YEAR,
+                # 下面是声明索引
+                INDEX idx_id_name_info(bookID, bookName, info)  # 根据bookID, bookName, info这三列创建联合索引
+            );
+            ```
+            ![Alt text](MySQL_images/test_multi_index.png)
+        5. 显式创建全文索引
+            **`FULLTEXT`全文索引只能创建在`CHAR`、`VARCHAR`和`TEXT`类型的列上**
+            举个创建全文索引的例子:
+            ```sql
+            CREATE TABLE book (
+                bookID BIGINT,
+                bookName VARCHAR(100),
+                authors VARCHAR(100),
+                info VARCHAR(100),
+                comment VARCHAR(100),
+                publicationTime YEAR,
+                # 下面是声明索引
+                FULLTEXT INDEX (info(50))  # 根据info的前50个字符创建全文索引
+            );
+            ```
+            ![Alt text](MySQL_images/test_fulltext_index.png)
+        6. 显式创建空间索引
+            空间索引只能创建在`GEOMETRY`类型的字段上
+            ```sql
+            CREATE TABLE test (
+                geo GEOMETRY NOT NULL
+                SPATIAL INDEX (geo)  # 根据geo创建空间索引
+            ) ENGINE=MyISAM;
+            ```
+    2. 在已经存在的表中添加索引
+        基本语法为:
+        ```sql
+        ALTER TABLE table_name ADD [INDEX | UNIQUE | FULLTEXT | SPATIAL] [index_name](column_name);
+        #或者
+        CREATE [UNIQUE | FULLTEXT | SPATIAL] INDEX index_name ON table_name(column_name);
+        ```
+        
+3. 删除索引
+    在删除索引的时候，需要注意的是，**添加AUTO_INCREMENT约束字段的唯一性索引不能删！！**
+    基本语法为:
+    ```sql
+    ALTER TABLE table_name DROP INDEX index_name;
+    # 或者
+    DROP INDEX index_name ON table_name;
+    ```
+
+4. MySQL8.0索引新特性
+    1. 支持降序索引
+        当我们想要倒序查询的时候通过创建倒序索引可以**极大的提高ORDER BY column DESC的效率**
+    2. 隐藏索引
+        通常而言，直接删除索引往往有着不小的风险，通过隐藏索引我们能告诉MySQL这个索引后面就不需要再使用了，然后我们再删除索引，这种删除方法被称为**软删除**。
+        注意，当我们更新数据时，被隐藏的索引同样会进行更新，所以如果长时间不使用，应该将其删除
+        * 直接创建不可见索引
+            ```sql
+            CREATE TABLE book (
+                bookID BIGINT,
+                bookName VARCHAR(100),
+                authors VARCHAR(100),
+                info VARCHAR(100),
+                comment VARCHAR(100),
+                publicationTime YEAR,
+                # 下面是声明索引
+                INDEX (bookName) INVISIBLE # 根据bookname创建不可见索引
+            );
+            ```
+        * 创建表以后创建不可见索引
+            ```sql
+            ALTER TABLE table_name ADD [INDEX | UNIQUE | FULLTEXT | SPATIAL] [index_name](column_name) INVISIBLE;
+            # 或者
+            CREATE INDEX index_name ON table_name(column_name) INVISIBLE;
+            ```
+        * 修改现有索引的可见性
+            ```sql
+            # 可见到不可见
+            ALTER TABLE table_name ALTER INDEX index_name INVISIBLE;
+            # 不可见到可见
+            ALTER TABLE table_name ALTER INDEX index_name VISIBLE;
+            ```
+
+5. 索引的设计原则
+    * 哪些情况适合添加索引？添加索引的规范是什么？
+        1. 字段的数值具有唯一性
+            如果**某个字段是唯一性的**，就可以直接创建**主键索引**或者**唯一索引**。
+            例如: 表中的ID
+        2. SELECT中频繁作为WHERE查询条件的字段
+            如果一个字段在SELECT语句中经常在WHERE条件中被使用到，就需要为这个字段创建一个索引。
+        3. 经常GROUP BY和ORDER BY的字段
+            由于索引会对数据进行排序，因此对于经常需要排序的字段而言，在构建索引后就不需要每一次调用ORDER BY都进行一次排序了。GROUP BY同理。
+        4. UPDATE、DELETE的WHERE条件列
+            原因与第二点类似。不过对于UPDATE来说，如果更新的字段不是作为索引的字段，速度会更快，否则由于修改字段需要同时修改索引，就会导致我们的修改时间变长。
+        5. DISTINCT字段需要创建索引
+            对于需要去重的字段也需要创建索引，因为在创建索引后能让字段值相同的数据排列在一起
+        6. 多表JOIN连接操作时创建索引的注意事项
+            * 表的连接数量**不要超过3张**，因为每增加一张就相当于增加了一层for循环
+            * **对WHERE条件创建索引**
+            * **对用于连接的字段创建索引，并且多张表中的类型必须一致**，否则需要使用函数进行隐式转换时，索引会失效
+        7. 使用列的类型小的创建索引
+            **类型小的**值得是类型大小，如`TINYINT`，`MEDIUMINT`，`INT`，`BIGINT`。这个原则的意思是，能用`TINYINT`就不用`MEDIUMINT`，能用小的就用小的。
+            这样做有以下的好处：
+            * 数据类型越小，查询时比较就越快
+            * 数据类型越小，索引占用的空间就越少，一个数据页内能存放的数据就越多，减少磁盘I/O的次数。
+        8. 使用字符串前缀创建索引
+            当字符串很长的时候，我们需要考虑是不是需要将整个字符串作为索引。
+            但是当我们截取字符串作为索引的时候，下面的这个SQL就很尴尬了：
+            ```sql
+            # 其中的name是VARCHAR类型且截取了一部分用来创建索引
+            SELECT * FROM table_name ORDER BY name LIMIT 10;
+            ```
+            在这种情况下，因为我们是通过截取了name的一部分来创建索引的，因此这条SQL是无法使用索引的，**只能进行文件排序。**
+        9. 区分度高(散列性高)的列适合作为索引
+            假设我们有如下的一个列`2, 5, 8, 2, 5, 8, 2, 5, 8`，这个数列虽然有9个数，但是列的基数缺只有3。这种情况由于相同的数据太多，并不适合作为索引。
+            如何判断一列的数据是否区分度高呢？我们可以通过以下的SQL语句计算
+            ```sql
+            SELECT COUNT(DISTINCT column_name) / COUNT(*) from table_name;
+            ```
+            得到的数据越接近1越好，一般超过**33%**就算是比较高效的索引了
+        10. 使用最频繁的列放到联合索引的左侧
+            这样可以减少需要创建的索引的数量
+        11. 在多个字段都要创建索引的情况下，联合索引优于单值索引
+            略
+
+    * 不适合创建索引的情况
 ### MySQL 事务(Transaction)
 
 ### MySQL 日志与备份

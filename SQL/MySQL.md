@@ -610,8 +610,199 @@ B树的每一个阶段最多可能包括M个子节点，其中M称为B树的阶�
         是目前`搜索引擎`使用的一种关键的检索技术，它能够通过`分词技术`等多种算法只能分析出文本文字中关键词的频率和重要性。
 
 2. 创建索引
-    
+    在创建表时添加索引: `CREATE TABLE`中指定索引列
+    在已经存在的表中添加索引: `ALTER TABLE`中指定索引
+    1. 创建表时建立索引
+        隐式的构建索引的例子: 
+        ```sql
+        CREATE TABLE departments (
+            deptID BIGINT PRIMARY KEY AUTO_INCREMENT,   # 默认情况下主键会作为索引，作为主键索引
+            deptName VARCHAR(20) NOT NULL
+        );
 
+        CREATE TABLE employees (
+            employeeID BIGINT PRIMARY KEY AUTO_INCREMENT,   # 默认情况下主键会作为索引，作为主键索引
+            employeeName VARCHAR(20) UNIQUE,            # 声明UNIQUE之后会使用这个列的数据生成唯一性索引
+            deptID BIGINT,
+            CONSTRAINT empDeptIdFK FOREIGN KEY (deptID) REFERENCES departments(deptID)  # 外键同样会生成一个索引
+        );
+        ```
+        显式的构建索引:
+        ```sql
+        # 基本的语法如下
+        CREATE TABLE table_name [column_name data_type] [UNIQUE | FULLTEXT | SPATIAL] [INDEX | KEY] [index_name] (column_name [lenght]) [ASC | DESC];
+        ```
+        * `UNIQUE`、`FULLTEXT`、`SPATIAL`可选参数，分别表示唯一索引、全文索引和空间索引
+        * `INDEX`和`KEY`是同义词，用来指定创建索引
+        * `index_name`指定索引的名字，可选参数，可以不指定，默认是column_name作为索引名称
+        * `column_name`是需要创建索引的列的字段，必须是表中已经定义好的列
+        * `length`可选参数，表示索引的长度，只有字符串类型的字段才能指定索引长度
+        * `ASC`和`DESC`指定升序或者降序地存储索引值
+        1. 显式创建普通索引
+            举个创建普通索引的例子:
+            ```sql
+            CREATE TABLE book (
+                bookID BIGINT,
+                bookName VARCHAR(100),
+                authors VARCHAR(100),
+                info VARCHAR(100),
+                comment VARCHAR(100),
+                publicationTime YEAR,
+                # 下面是声明索引
+                INDEX(publicationTime)  # 根据publicationTime作为索引列创建普通索引
+            );
+            ```
+            ![Alt text](MySQL_images/test_normal_index.png)
+        2. 显式创建唯一索引
+            举个创建唯一索引的例子:
+            ```sql
+            CREATE TABLE book (
+                bookID BIGINT,
+                bookName VARCHAR(100),
+                authors VARCHAR(100),
+                info VARCHAR(100),
+                comment VARCHAR(100),
+                publicationTime YEAR,
+                # 下面是声明索引
+                # 需要注意的是，创建唯一索引后comment列就有UNIQUE约束了！
+                UNIQUE INDEX unique_comment_idx(comment)  # 根据comment作为索引列创建唯一索引
+            );
+            ```
+            ![Alt text](MySQL_images/test_unique_index.png)
+        3. 显式创建主键索引(通过定义主键约束的方式)
+            和隐式的一致，并没有额外的显式创建主键索引的方法
+        4. 显式创建联合索引
+            举个创建联合索引的例子:
+            ```sql
+            CREATE TABLE book (
+                bookID BIGINT,
+                bookName VARCHAR(100),
+                authors VARCHAR(100),
+                info VARCHAR(100),
+                comment VARCHAR(100),
+                publicationTime YEAR,
+                # 下面是声明索引
+                INDEX idx_id_name_info(bookID, bookName, info)  # 根据bookID, bookName, info这三列创建联合索引
+            );
+            ```
+            ![Alt text](MySQL_images/test_multi_index.png)
+        5. 显式创建全文索引
+            **`FULLTEXT`全文索引只能创建在`CHAR`、`VARCHAR`和`TEXT`类型的列上**
+            举个创建全文索引的例子:
+            ```sql
+            CREATE TABLE book (
+                bookID BIGINT,
+                bookName VARCHAR(100),
+                authors VARCHAR(100),
+                info VARCHAR(100),
+                comment VARCHAR(100),
+                publicationTime YEAR,
+                # 下面是声明索引
+                FULLTEXT INDEX (info(50))  # 根据info的前50个字符创建全文索引
+            );
+            ```
+            ![Alt text](MySQL_images/test_fulltext_index.png)
+        6. 显式创建空间索引
+            空间索引只能创建在`GEOMETRY`类型的字段上
+            ```sql
+            CREATE TABLE test (
+                geo GEOMETRY NOT NULL
+                SPATIAL INDEX (geo)  # 根据geo创建空间索引
+            ) ENGINE=MyISAM;
+            ```
+    2. 在已经存在的表中添加索引
+        基本语法为:
+        ```sql
+        ALTER TABLE table_name ADD [INDEX | UNIQUE | FULLTEXT | SPATIAL] [index_name](column_name);
+        #或者
+        CREATE [UNIQUE | FULLTEXT | SPATIAL] INDEX index_name ON table_name(column_name);
+        ```
+        
+3. 删除索引
+    在删除索引的时候，需要注意的是，**添加AUTO_INCREMENT约束字段的唯一性索引不能删！！**
+    基本语法为:
+    ```sql
+    ALTER TABLE table_name DROP INDEX index_name;
+    # 或者
+    DROP INDEX index_name ON table_name;
+    ```
+
+4. MySQL8.0索引新特性
+    1. 支持降序索引
+        当我们想要倒序查询的时候通过创建倒序索引可以**极大的提高ORDER BY column DESC的效率**
+    2. 隐藏索引
+        通常而言，直接删除索引往往有着不小的风险，通过隐藏索引我们能告诉MySQL这个索引后面就不需要再使用了，然后我们再删除索引，这种删除方法被称为**软删除**。
+        注意，当我们更新数据时，被隐藏的索引同样会进行更新，所以如果长时间不使用，应该将其删除
+        * 直接创建不可见索引
+            ```sql
+            CREATE TABLE book (
+                bookID BIGINT,
+                bookName VARCHAR(100),
+                authors VARCHAR(100),
+                info VARCHAR(100),
+                comment VARCHAR(100),
+                publicationTime YEAR,
+                # 下面是声明索引
+                INDEX (bookName) INVISIBLE # 根据bookname创建不可见索引
+            );
+            ```
+        * 创建表以后创建不可见索引
+            ```sql
+            ALTER TABLE table_name ADD [INDEX | UNIQUE | FULLTEXT | SPATIAL] [index_name](column_name) INVISIBLE;
+            # 或者
+            CREATE INDEX index_name ON table_name(column_name) INVISIBLE;
+            ```
+        * 修改现有索引的可见性
+            ```sql
+            # 可见到不可见
+            ALTER TABLE table_name ALTER INDEX index_name INVISIBLE;
+            # 不可见到可见
+            ALTER TABLE table_name ALTER INDEX index_name VISIBLE;
+            ```
+
+5. 索引的设计原则
+    * 哪些情况适合添加索引？添加索引的规范是什么？
+        1. 字段的数值具有唯一性
+            如果**某个字段是唯一性的**，就可以直接创建**主键索引**或者**唯一索引**。
+            例如: 表中的ID
+        2. SELECT中频繁作为WHERE查询条件的字段
+            如果一个字段在SELECT语句中经常在WHERE条件中被使用到，就需要为这个字段创建一个索引。
+        3. 经常GROUP BY和ORDER BY的字段
+            由于索引会对数据进行排序，因此对于经常需要排序的字段而言，在构建索引后就不需要每一次调用ORDER BY都进行一次排序了。GROUP BY同理。
+        4. UPDATE、DELETE的WHERE条件列
+            原因与第二点类似。不过对于UPDATE来说，如果更新的字段不是作为索引的字段，速度会更快，否则由于修改字段需要同时修改索引，就会导致我们的修改时间变长。
+        5. DISTINCT字段需要创建索引
+            对于需要去重的字段也需要创建索引，因为在创建索引后能让字段值相同的数据排列在一起
+        6. 多表JOIN连接操作时创建索引的注意事项
+            * 表的连接数量**不要超过3张**，因为每增加一张就相当于增加了一层for循环
+            * **对WHERE条件创建索引**
+            * **对用于连接的字段创建索引，并且多张表中的类型必须一致**，否则需要使用函数进行隐式转换时，索引会失效
+        7. 使用列的类型小的创建索引
+            **类型小的**值得是类型大小，如`TINYINT`，`MEDIUMINT`，`INT`，`BIGINT`。这个原则的意思是，能用`TINYINT`就不用`MEDIUMINT`，能用小的就用小的。
+            这样做有以下的好处：
+            * 数据类型越小，查询时比较就越快
+            * 数据类型越小，索引占用的空间就越少，一个数据页内能存放的数据就越多，减少磁盘I/O的次数。
+        8. 使用字符串前缀创建索引
+            当字符串很长的时候，我们需要考虑是不是需要将整个字符串作为索引。
+            但是当我们截取字符串作为索引的时候，下面的这个SQL就很尴尬了：
+            ```sql
+            # 其中的name是VARCHAR类型且截取了一部分用来创建索引
+            SELECT * FROM table_name ORDER BY name LIMIT 10;
+            ```
+            在这种情况下，因为我们是通过截取了name的一部分来创建索引的，因此这条SQL是无法使用索引的，**只能进行文件排序。**
+        9. 区分度高(散列性高)的列适合作为索引
+            假设我们有如下的一个列`2, 5, 8, 2, 5, 8, 2, 5, 8`，这个数列虽然有9个数，但是列的基数缺只有3。这种情况由于相同的数据太多，并不适合作为索引。
+            如何判断一列的数据是否区分度高呢？我们可以通过以下的SQL语句计算
+            ```sql
+            SELECT COUNT(DISTINCT column_name) / COUNT(*) from table_name;
+            ```
+            得到的数据越接近1越好，一般超过**33%**就算是比较高效的索引了
+        10. 使用最频繁的列放到联合索引的左侧
+            这样可以减少需要创建的索引的数量
+        11. 在多个字段都要创建索引的情况下，联合索引优于单值索引
+            略
+
+    * 不适合创建索引的情况
 ### MySQL 事务(Transaction)
 
 ### MySQL 日志与备份

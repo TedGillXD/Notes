@@ -803,6 +803,107 @@ B树的每一个阶段最多可能包括M个子节点，其中M称为B树的阶�
             略
 
     * 不适合创建索引的情况
+        1. 在WHERE(包括GROUP BY和ORDER BY)中不适用的字段不适用索引
+        2. 数据量小的表最好不要使用索引(比如少于一千)，直接查找可能I/O次数更少
+        3. 有大量重复数据的列上不要建立索引
+        4. 避免对经常更新的表和字段创建过多的索引
+        5. 不建议用无序的值作为索引
+        6. 删除不再使用或者很少使用的索引
+        7. 不要定义冗余或重复的索引
+
+#### 性能分析工具的使用
+1. 查看系统性能的参数
+    使用`SHOW STATUS`语句查询一些MySQL数据库的`性能参数`、`执行频率`
+    语法如下：
+    ```sql
+    SHOW [GLOBAL | SESSION] STATUS LIKE 'arguments';
+    ```
+    一些常用的性能参数如下：
+    * Connections: 连接MySQL服务器的次数
+    * Uptime: MySQL服务器的上线时间
+    * Slow_queries: 慢查询的次数
+    * Innodb_row_read: Select查询返回的行数
+    * Innodb_row_inserted: 执行INSERT操作插入的行数
+    * Innodb_row_updated: 执行UPDATE操作更新的函数
+    * Innodb_row_deleted: 执行DELETE操作删除的行数
+    * Com_select: 查询操作的次数
+    * Com_insert: 插入操作的次数
+    * Com_update: 更新操作的次数
+    * Com_delete: 删除操作的次数
+
+2. 统计SQL的查询成本
+    一条SQL语句在执行前需要确定最终的**执行计划**，如果存在多种执行计划的话，MySQL会计算每一个执行计划所需要的成本，从中选择**成本最小**的最为最终的执行计划。
+    如果我们想要查看某条SQL语句的查询成本，可以在执行完该条SQL语句后，通过查看会话中的`last_query_cost`变量值来得到当前查询的成本。它通常也是我们**评价一个查询的执行效率**的一个常用指标。这个查询成本对应的是**SQL语句所需要读取的页的数量**。
+    通过以下指令可以查询上一条SQL语句的成本。
+    ```sql
+    SHOW STATUS LIKE 'last_query_cost';
+    ```
+
+3. 定位执行慢的SQL：慢查询日志
+    MySQL的慢查询日志是用来记录MySQL中**响应时间超过阈值**的SQL语句，具体指运行时间超过`long_qurey_time`值的SQL，这些SQL语句就会被记录到查询日志当中。`long_qurey_time`的默认值为10，意思是运行10秒以上的SQL语句属于慢查询。
+    **默认情况下慢查询日志是不开启的**，因为会影响性能。
+    1. 首先查看慢查询日志功能是否已经开启，使用下面的命令即可
+        ```sql
+        SHOW VARIABLES LIKE '%show_query_log%';
+        ```
+    2. 开启慢查询日志功能，通过以下SQL命令：
+        ```sql
+        SET GLOBAL slow_query_log = 'ON';
+        ```
+    3. 修改响应时间的阈值
+        ```sql
+        SET GLOBAL long_query_time = time_in_second;    # 修改后面创建的阈值
+        SET long_query_time = time_in_second;           # 修改当前SESSION的阈值
+        ```
+    4. 查询慢查询数目
+        ```sql
+        SHOW GLOBAL STATUS LIKE '%Slow_querys%';
+        ```
+4. 查看SQL的执行成本：`SHOW PROFILE`
+    `SHOW PROFILE`可以用来查看当前会话中的SQL语句究竟都干了什么，在上面的架构篇中有所介绍。此功能也是**默认关闭状态，保存最近15次SQL语句的执行信息**。
+    查看此功能是否开启：
+    ```sql
+    SHOW VARIABLES LIKE 'profiling';
+    ```
+    通过以下SQL将此功能对于该会话开启：
+    ```sql
+    SET PROFILING = 'ON';
+    ```
+    通过以下的指令查看某一行SQL的执行信息：
+    ```sql
+    SHOW PROFILE [column_name] [FOR QUERY query_index];
+    #比如
+    SHOW PROFILE cpu,block io FOR QUERY 3;
+    ```
+    不过`SHOW PROFILE`指令已经即将被弃用了。
+
+5. 分析查询工具：`EXPLAIN`
+    通过`EXPLAIN`关键词，我们能查看一条SQL语句在被执行时所选择的执行计划，便于我们对SQL语句进行优化。
+    1. 能做什么？
+        * 表的读取顺序
+        * 数据读取操作的操作类型
+        * 哪些索引可以被使用
+        * 哪些索引被实际使用
+        * 表之间的引用
+        * 每张表有多少行被优化器查询
+    2. 如何使用？
+        在SQL语句前加上`EXPLAIN`即可。
+    3. `EXPLAIN`各个列的作用
+        | 列名 | 描述 |
+        | ---- | ---- |
+        | `id` | 在一个大的查询语句中每一个SELECT关键字都对应一个**唯一的ID** |
+        | `select_type` | SELECT关键字对应的那个查询的类型 |
+        | `table` | 表名，一行数据代表一个单表，若是连表查询，就会有多条数据 |
+        | `partition` | 匹配的分区信息 |
+        | `type` | 针对单表的访问方法 |
+        | `possible_keys` | 可能用到的索引 |
+        | `key` | 实际用到的索引 |
+        | `key_len` | 实际使用到的索引的长度 |
+        | `ref` | 当使用索引列等值查询时，与索引列进行等值匹配的对象信息 |
+        | `rows` | 预估需要读取的记录条数 |
+        | `filtered` | 某个表经过搜索条件过滤后剩余记录条数的百分比 |
+        | `Extra` | 一些额外的信息 |
+
 ### MySQL 事务(Transaction)
 
 ### MySQL 日志与备份

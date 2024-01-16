@@ -112,7 +112,7 @@ If we categorize it in its structure, we will have 3 different types of IRs
         Its DAG will be:
         ![Alt text](Images/DAG2.png)
 
-    * **Cell Graph**: It represent functions calling relations. It is the basis for inter-procedural analysis
+    * **Call Graph**: It represent functions calling relations. It is the basis for inter-procedural analysis
 
     * **Dependence Graph**
 
@@ -203,3 +203,67 @@ If we categorize it in its structure, we will have 3 different types of IRs
 #### AST to Linear IR
 **Post-order Tree Walk**:
 ![Alt text](Images/AST_to_Three-address_Code.png)
+
+### Program Optimization
+#### Redundancy Elimination
+1. Value Numbering(VN)
+    **Challenge:** We can not identified the textual name of variable to say that this calculation is redundant.
+    **Solution:** Instead of using its textual name, we can simply use the number of each variable. For example, assuming that we have segment of source code:
+    ```assembly
+    a <- x + y
+    z <- y
+    d <- 17
+    c <- x + z
+    ```
+    Assuming that x = 1 and y = 2, for the first line of code, we will get:
+    ```
+    <x, 1> <y, 2> <1 + 2, 3> <a, 3> # after first line code executed
+    ... <z, 2>  # after second line code executed
+    ... <17, 4> <d, 4> # after third line executed, note that the VN will be the same if they have the same value
+    ... <c, 3> # after final line executed
+    ```
+    In the last line `c <- x + z`, the compiler will rewrite it into `c <- 1 + 2`, and then check the Hash Table to see if there is key "1 + 2" exist. Actually, it exists, so it will be replace by 3, which means variable a.
+
+    **Issues:**
+    * Overwritten Issue
+        Sometimes we will have code like:
+        ```
+        a <- x + y
+        a <- 17
+        c <- x + y
+        ```
+        In this case, we want ot calculate the x + y for c which we already calculated in the first line. But after the first line has been executed, the value a has been overwritten with 17. So in the hash table, we cannot find the value of `x + y` anymore. How can we deal with that?
+        Just like what we can do in CPU for supporting Out of Order Execution, we can simply **rename all the variables**. After renaming the code, the original code will be:
+        ```
+        a0 <- x0 + y0
+        a1 <- 17
+        c0 <- x0 + y0
+        ```
+        So that we can have the value of `a0` stored in Hash Table and remove the redundant calculation in the third line.
+
+        > * subscript (name version) starts from 0
+        > * superscript (value number) starts from 1
+
+    **Extensions & Complexities:**
+    * Constant folding
+        The compiler will evaluate constant expression at compile-time. For example:
+        ```
+        a <- 4
+        d <- b + c
+        b <- a + 2   # both a and 2 are constant
+        ```
+        The rewritten code will be
+        ```
+        a <- 4
+        d <- b + c
+        b <- 6
+        ```
+
+    * Simplify algebraic identities during VN
+        Some of the special cases has the same 
+
+    * Handle commutative operations
+    * The importance of order
+    * Pointer assignment 
+
+2. Optimization Scopes

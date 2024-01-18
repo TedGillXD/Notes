@@ -810,6 +810,137 @@ B树的每一个阶段最多可能包括M个子节点，其中M称为B树的阶�
         5. 不建议用无序的值作为索引
         6. 删除不再使用或者很少使用的索引
         7. 不要定义冗余或重复的索引
+    
+    * 索引失效的情况
+        实际上，最终是不是用索引是优化器说了算，如果优化器发现不适用索引成本更低，则不会使用索引。
+        首先我们假设存在这样的一个数据库，包括如下的表:
+        ```sql
+        # 表结构
+        CREATE TABLE students (
+            'id' INT(11)  PRIMARY KEY NOT NULL AUTO_INCREMENT,
+            'studentNo' INT NOT NULL,
+            'name' VARCHAR(20) DEFAULT NULL,
+            'age' INT(3) DEFAULT NULL,
+            'classID' INT(11) DEFAULT NULL,
+        ) ENGINE=INNODB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4;
+        ```
+        1. 全值匹配
+            假设我们有如下的一个SQL查询语句
+            ```sql
+            # SQL查询语句
+            SELECT SQL_NO_CACHE * FROM students WHERE age = 30 AND classID = 4 AND name = 'abcd';
+            ```
+            对于students表，假设我们存在三种不同的索引，分别是：
+            ```sql
+            # 只针对age构建的索引
+            CREATE INDEX idx_age ON students(age);
+            # 针对age和classID构建的联合索引
+            CREATE INDEX idx_age_classID ON students(age, classID);
+            # 针对age，classID和name构建的联合索引
+            CREATE INDEX idx_age_classID_name ON students(age, classID, name);
+            ```
+            那么针对我们的查询语句而言，前两种索引就会失效了，因为有更精准的索引可以帮助降低查询成本，也就是如果索引覆盖查询的值越多，成本越低，那些更广泛使用的索引就会失效。
+
+        2. 查询的时候没有匹配最佳左前缀
+            对于students表，假设我们有如下索引:
+            ```sql
+            CREATE INDEX idx_age_classID_name ON students(age, classID, name);
+            ```
+            但是我们的SQL语句是这样的:
+            ```sql
+            # 在这个SQL语句中没有使用age字段
+            SELECT SQL_NO_CACHE * FROM students WHERE classID = 4 AND name = 'abcd';
+            ```
+            在这种情况下，我们的索引`idx_age_classID_name`就会失效，因为B+树实际上是用过索引中第一个字段进行创建的，如果我们的WHERE条件中不存在这第一个字段，这颗B+树将无法被利用，此时这个索引也就失效了。
+            
+        3. 计算、函数会导致索引失效
+            假设我们有如下索引和两条效果一模一样的SQL查询:
+            ```sql
+            CREATE INDEX idx_name ON students(name); # 索引
+
+            SELECT SQL_NO_CACHE * FROM students WHERE students.name LIKE 'abc%';
+            SELECT SQL_NO_CACHE * FROM students WHERE LEFT(students.name, 3) = 'abc';
+            ```
+            在这种情况下，我们在第二条SQL语句中使用了`LEFT()`函数，这种操作会导致索引失效了，因为在B+树中索引是按照整个name字段进行创建的，而不是通过student.name的前三个字符创建的，所以完全无法利用上索引。
+            同样的对于计算也会导致这种问题:
+            ```sql
+            SELECT SQL_NO_CACHE * FROM students WHERE students.studentNo + 1 = 100001;  # 这条索引会失效
+            SELECT SQL_NO_CACHE * FROM students WHERE students.studentNo = 100000;  # 这条更好
+            ```
+
+        4. 类型转换(显式或者隐式)会导致索引失效
+            假设我们有如下索引和SQL语句:
+            ```sql
+            CREATE INDEX idx_name ON students(name); # 索引
+
+            SELECT SQL_NO_CACHE * FROM students WHERE name = 123; # 发生隐式转换，从VARCHAR变成INT
+            SELECT SQL_NO_CACHE * FROM students WHERE name = '123'; # 索引生效
+            ```
+            在这种情况下，索引同样会失效。
+
+        5. 范围条件中右边的列的索引失效
+            假设我们有如下索引和SQL语句:
+            ```sql
+            # 索引
+            CREATE INDEX idx_age_classID_name ON students(age, classID, name);
+
+            SELECT SQL_NO_CACHE * FROM students WHERE students.age = 30 AND students.classID > 20 AND student.name = 'abc';
+            ```
+            在这种情况下，虽然能使用上我们的`idx_age_classID_name`索引，但是name部分是失效的，也就是在查找name='abc'的时候，虽然我们的索引中式记录了name列的信息，但是无法使用，因为在索引中name是在classID的右侧。
+            **将需要使用范围查询的字段放到最右边，就能解决这个问题**
+            ```sql
+            CREATE INDEX idx_age_classID_name ON students(age, name, classID);
+            ```
+        
+        6. 不等于条件导致索引失效
+             假设我们有如下索引和SQL语句:
+            ```sql
+            CREATE INDEX idx_name ON students(name); # 索引
+
+            SELECT SQL_NO_CACHE * FROM students WHERE student.name != 'abc';
+            ```
+            这种情况下无法使用索引
+
+        7. `IS NULL`可以使用索引，但`IS NOT NULL`无法使用索引
+            假设我们有如下索引和SQL语句:
+            ```sql
+            CREATE INDEX idx_name ON students(name); # 索引
+
+            SELECT SQL_NO_CACHE * FROM students WHERE student.name IS NULL; # 可以使用索引
+            SELECT SQL_NO_CACHE * FROM students WHERE student.name IS NOT NULL; # 不可以使用索引，相当于上面的!=符号
+            ```
+            同理的，`NOT LIKE`一样无法使用索引
+            **要解决这个问题，我们可以通过约定好一个非法值，比如-1等，这样我们可以把NOT运算转换成EQUAL运算，这样就能使用索引了。**
+        
+        8. LIKE寻找通配符%开头的查找索引失效
+            假设我们有如下的索引和SQL语句: 
+            ```sql
+            CREATE INDEX idx_name ON students(name); # 索引
+
+            SELECT SQL_NO_CACHE * FROM students WHERE student.name = 'abc%'; # 可以使用索引
+            SELECT SQL_NO_CACHE * FROM students WHERE student.name = '%abc%'; # 不可以使用索引
+            SELECT SQL_NO_CACHE * FROM students WHERE student.name = '%abc'; # 不可以使用索引
+            ```
+
+        9. OR前后存在非索引的列，索引会失效
+            假设我们有如下的索引和SQL语句: 
+            ```sql
+            CREATE INDEX idx_age ON students(age); # 索引
+
+            SELECT SQL_NO_CACHE * FROM students WHERE age = 10 OR classID = 10; # 不可以使用索引
+            ```
+            要解决这个问题，我们需要给两个字段都加入索引
+            ```sql
+            CREATE INDEX idx_age ON students(age); # 索引
+            CREATE INDEX idx_classID ON students(classID); # 索引
+
+            SELECT SQL_NO_CACHE * FROM students WHERE age = 10 OR classID = 10; # 不可以使用索引
+            ```
+        
+        10. 数据库和表的字符集不统一
+            若是不统一，则会导致字符集的隐式转换，导致索引失效。解决方法就是统一字符集即可。
+
+
 
 #### 性能分析工具的使用
 1. 查看系统性能的参数
@@ -903,6 +1034,61 @@ B树的每一个阶段最多可能包括M个子节点，其中M称为B树的阶�
         | `rows` | 预估需要读取的记录条数 |
         | `filtered` | 某个表经过搜索条件过滤后剩余记录条数的百分比 |
         | `Extra` | 一些额外的信息 |
+
+#### 连接查询的优化策略与底层原理
+1. 左(右)连接
+    对于左右连接来说，需要给对应的字段创建索引即可。
+    但是有时候MySQL会将我们的外连接SQL语句进行重写，使其从外连接变为内连接的运行方式。此时，MySQL就有能力去选择哪一张表作为被驱动表，哪一张表作为驱动表了。通俗来说就是**小结果集驱动大结果集。**
+
+2. 内连接
+    对于内连接来说，由于两张表的地位是平等的，因此MySQL有机会决定谁是驱动表，谁是被驱动表。此时，**MySQL的优化策略就是查询开销小的表作为驱动表。** 简单来说，就是**小结果集驱动大结果集。**
+
+#### 子查询优化
+子查询虽然功能强大，但是性能却不是很好，具体的原因有以下几点：
+* 执行子查询时，MySQL需要为内层查询创建一个临时表。在擦汗寻完毕后再撤掉这些表，会消耗更多的I/O和CPU资源。
+* 子查询的结果集存储的临时表**不会存在索引**，所以在这些临时表上进行查询性能会受到一定的影响。
+* 结果集越大的子查询，对性能的影响也就越大。
+
+**解决方法：** 将子查询转换为JOIN查询，实在无法转换就分成多次SQL进行查询。
+
+#### 排序优化
+如果不对进行`ORDER BY`的字段添加索引，当我们需要排序查询结果的时候，MySQL会进行`FileSort`排序，就是把数据读进内存后进行排序，带来CPU上的压力，若是文件过大，还会产生临时文件挤占硬盘I/O。
+就算我们为`ORDER BY`的字段添加了索引，也存在一些情况下索引会失效，比如：
+* ORDER BY时不适用LIMIT，索引会失效(返回的列索引无法覆盖的情况下)
+    比如说如果我们不指定取前多少行数据，那么这个SQL语句就会返回整个数据表的内容，这是索引存不存在也就没有意义了。SQL如下：
+    ```sql
+    CREATE INDEX idx_age_classID ON students(age, classID); # 索引
+
+    # 索引会失效，因为返回的内容是整个表，没有必要用索引。
+    # 并且由于我们要返回的列数据超过了上面声明的非聚簇索引的覆盖范围，会导致大量的回表操作
+    SELECT SQL_NO_CACHE * FROM students ORDER BY age, classID;
+
+    # 会使用索引`idx_age_classID`，因为不需要回表
+    SELECT SQL_NO_CACHE age, classID FROM students ORDER BY age, classID;
+
+    # 会使用索引`idx_age_classID`，因为数据量被限制了，回表导致的性能影响不大
+    SELECT SQL_NO_CACHE * FROM students ORDER BY age, classID LIMIT 10;
+    ```
+* ORDER BY的顺序错误时，索引会失效
+    比如说存在一个索引是这样定义的
+    ```sql
+    CREATE INDEX idx_age_classID ON students(age, classID, studentNo); # 索引
+
+    # 无法使用索引，不符合索引的最左前缀原则
+    SELECT * FROM students ORDER BY classID LIMIT 10;
+
+    # 索引失效，因为顺序不一样
+    SELECT * FROM students ORDER BY age, studentNo, classID LIMIT 10;   
+
+    # 索引失效，因为B+树种的索引是升序存的，除非索引改成降序存储
+    SELECT * FROM students ORDER BY age DESC, classID LIMIT 10;   
+
+    # 能使用索引，MySQL会从B+树的最右边的叶子节点开始倒序查找
+    SELECT * FROM students ORDER BY age DESC, classID DESC LIMIT 10;   
+    ```
+
+
+
 
 ### MySQL 事务(Transaction)
 

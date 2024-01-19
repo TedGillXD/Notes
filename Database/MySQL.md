@@ -1051,6 +1051,34 @@ B树的每一个阶段最多可能包括M个子节点，其中M称为B树的阶�
 
 **解决方法：** 将子查询转换为JOIN查询，实在无法转换就分成多次SQL进行查询。
 
+在子查询中，我们会碰到`EXISTS`和`IN`这两种关键词，它们都能实现同一种功能，但实际上性能上是有差别的，我们需要根据不同的情况进行选择，遵循的原则同样是**小结果集驱动大结果集。**
+举个例子:
+```sql
+SELECT * FROM A WHERE cc IN (SELECT cc FROM B);
+
+SELECT * FROM A WHERE cc EXISTS (SELECT cc FROM B WHERE B.cc = A.cc);
+```
+由于IN的实现相当于外表循环，因此当A表比较小的时候，我们选择第一种写法，执行过程类似于:
+```c
+for(int i = 0; i < A.size(); i++) {
+    for(int j = 0; j < B.size(); b++) {
+        if(A[i].cc == B[j].cc) {
+            // do something
+        }
+    }
+}
+```
+反过来，如果A表比较大的时候，我们选择第二种写法，此时A表相当于被驱动表，符合我们的条件，执行过程类似于:
+```c
+for(int i = 0; i < B.size(); i++) {
+    for(int j = 0; j < A.size(); b++) {
+        if(B[i].cc == A[j].cc) {
+            // do something
+        }
+    }
+}
+```
+
 #### 排序优化
 如果不对进行`ORDER BY`的字段添加索引，当我们需要排序查询结果的时候，MySQL会进行`FileSort`排序，就是把数据读进内存后进行排序，带来CPU上的压力，若是文件过大，还会产生临时文件挤占硬盘I/O。
 就算我们为`ORDER BY`的字段添加了索引，也存在一些情况下索引会失效，比如：
@@ -1087,8 +1115,26 @@ B树的每一个阶段最多可能包括M个子节点，其中M称为B树的阶�
     SELECT * FROM students ORDER BY age DESC, classID DESC LIMIT 10;   
     ```
 
+#### 索引下推(Index Condition Pushdown)
+实际上就是在根据某一个条件在索引完成搜索后，不着急进行回表，在过滤后的结果集中进行下一个条件的过滤，从而减少潜在的I/O访问。
+举个最简单例子就是
+```sql
+CREATE INDEX idx_key1 ON table1(key1);
+SELECT * FROM table1 WHERE key1 > 'z' AND key1 LIKE '%a';
+```
+在这一句SQL中，优化器在使用后idx_key1过滤过后，并不会直接回表查询剩余数据再进行条件`LIKE '%a'`的过滤，而是现在结果集中进行条件`LIKE '%a'`的过滤，再进行回表。
+再来一个一般一点的例子：
+```sql
+CREATE TABLE person(
+    'firstname' VARCHAR(10) NOT NULL,
+    'lastname' VARCHAR(10) NOT NULL,
+    'zipcode' VARCHAR(10) NOT NULL,
+    KEY 'idx_name_zip' ('firstname', 'lastname', 'zipcode');
+);
 
-
+SELECT * FROM person WHERE firstname = '王' AND lastname = '%五%' AND zipcode = '%0123%';
+```
+在上述的SQL中，索引`idx_name_zip`只能使用到`firstname`部分的检索，而后面两个条件无法使用索引。在实际的执行中，MySQL不会在使用索引过滤完firstname后直接回表进行查找，而是在过滤出来的结果集中完成对`lastname`和`zipcode`条件的过滤，这是因为我们的索引覆盖了lastname和zipcode两个字段，通过直接在结果集中进行过滤我们可以减少I/O次数。
 
 ### MySQL 事务(Transaction)
 

@@ -1,0 +1,103 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/26.2.15 Chrome/134.0.6998.205 Electron/35.2.1 Safari/537.36" version="26.2.15">
+  <diagram name="第 1 页" id="-_A9c9u7Ix10UX10esTb">
+    <mxGraphModel dx="1181" dy="687" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="JIKuLeQ0UlQxSlvGaHlh-7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="JIKuLeQ0UlQxSlvGaHlh-1" target="JIKuLeQ0UlQxSlvGaHlh-2" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="JIKuLeQ0UlQxSlvGaHlh-1" value="调用UWidget::RebuildWidget" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="260" y="240" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="JIKuLeQ0UlQxSlvGaHlh-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="JIKuLeQ0UlQxSlvGaHlh-2" target="JIKuLeQ0UlQxSlvGaHlh-9" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="JIKuLeQ0UlQxSlvGaHlh-2" value="构建对应的TDecl对象" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="130" y="350" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="JIKuLeQ0UlQxSlvGaHlh-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="JIKuLeQ0UlQxSlvGaHlh-3" target="JIKuLeQ0UlQxSlvGaHlh-9" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="JIKuLeQ0UlQxSlvGaHlh-3" value="构建对应类型的FArgument对象" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="370" y="350" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="JIKuLeQ0UlQxSlvGaHlh-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" parent="1" source="JIKuLeQ0UlQxSlvGaHlh-1" target="JIKuLeQ0UlQxSlvGaHlh-3" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="365" y="310" as="sourcePoint" />
+            <mxPoint x="235" y="390" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="JIKuLeQ0UlQxSlvGaHlh-14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="JIKuLeQ0UlQxSlvGaHlh-9" target="JIKuLeQ0UlQxSlvGaHlh-13" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="JIKuLeQ0UlQxSlvGaHlh-9" value="调用TDecl对象的&amp;lt;&amp;lt;=操作符函数，将构建好的FArgument传入TDecl对象" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="255" y="470" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="JIKuLeQ0UlQxSlvGaHlh-12" value="作为参数" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
+          <mxGeometry x="470" y="410" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="JIKuLeQ0UlQxSlvGaHlh-16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="JIKuLeQ0UlQxSlvGaHlh-13" target="JIKuLeQ0UlQxSlvGaHlh-15" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="JIKuLeQ0UlQxSlvGaHlh-13" value="调用T?RequiredArgs的CallConstruct" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="245" y="570" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="JIKuLeQ0UlQxSlvGaHlh-15" value="调用对应SWidget的Construct(const FArgument&amp;amp; InArgs)函数" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="245" y="670" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="JIKuLeQ0UlQxSlvGaHlh-17" value="构建出SWidget，包括把传入的输入委托也赋值到SWidget中对应的成员变量" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
+          <mxGeometry x="470" y="670" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="v9foYll9yPJ8kzGGI2v3-1" target="v9foYll9yPJ8kzGGI2v3-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-1" value="FEngineLoop::Tick()" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="200" y="900" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-2" value="引擎主循环，每一帧调用" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="400" y="915" width="145" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="v9foYll9yPJ8kzGGI2v3-3" target="v9foYll9yPJ8kzGGI2v3-6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-3" value="FSlateApplication::PollGameDeviceState()" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="165" y="1010" width="260" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-5" value="在每一帧中查询输入状态" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="295" y="970" width="145" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="v9foYll9yPJ8kzGGI2v3-6" target="v9foYll9yPJ8kzGGI2v3-9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-6" value="FWindowsApplication::PollGameDeviceState()" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="165" y="1120" width="260" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-8" value="调用特定平台的输入查询函数" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="305" y="1080" width="145" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="v9foYll9yPJ8kzGGI2v3-9" target="v9foYll9yPJ8kzGGI2v3-12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-9" value="IInputDevice::SendControllerEvent()" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="177.5" y="1230" width="235" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-11" value="调用到某一个输入设备的发送输入事件函数" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="305" y="1189" width="145" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="v9foYll9yPJ8kzGGI2v3-12" target="v9foYll9yPJ8kzGGI2v3-15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-12" value="FSlateApplication中对应的按钮事件" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="177.5" y="1380" width="235" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-14" value="如果按键状态发生变化，向MessageHandler发送相应事件，MessageHandler只能为FSlateApplication" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="305" y="1300" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="v9foYll9yPJ8kzGGI2v3-15" value="获取焦点路径上的所有SlateWidget，按照一定的顺序将按钮信息传递到SlateWidget中" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="177.5" y="1500" width="235" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

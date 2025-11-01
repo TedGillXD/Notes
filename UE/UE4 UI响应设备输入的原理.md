@@ -47,7 +47,7 @@ public:
 };
 ```
 能看到这两个I开头的接口类定义了一系列的纯虚函数，实际上这个接口定义的是针对所有能接入UE的输入设备的行为，如果我们在IDE中根据这两个接口查找其对应的Usage情况，能发现其在不同的平台中被使用了：
-![](./images/InputDeviceResult.png)
+![](./Images/InputDeviceResult.png)
 如果我们把目光聚焦到Windows这个模块当中的使用，我们能发现其在两个文件中被使用到了，分别是：
 * `XInputInterface.h`
 * `WindowsApplication.cpp`
@@ -474,7 +474,7 @@ FWindowsApplication* FWindowsApplication::CreateWindowsApplication( const HINSTA
 }
 ```
 Emmm，构造函数这边我们似乎并没能获取到什么关于设置MessageHandler有用的信息，如果我们继续沿着Setter这条路径往上查找呢？
-![alt text](./images/SetPlatformApplicationCaller.png)
+![alt text](./Images/SetPlatformApplicationCaller.png)
 更奇怪了，这个Caller甚至不在Runtime模块，而是和CL工具相关的调用，所以游戏本体的设置肯定不是在这里。
 
 #### GenericApplication是保存在哪里的
@@ -555,7 +555,7 @@ int32 FEngineLoop::PreInitPreStartupScreen(const TCHAR* CmdLine) {
 终于！我们找到了在引擎主循环当中的调用！在引擎主循环的`PreInitPreStartupScreen`函数当中、如果当前运行的不是专用服务器模式，并且如果是通常的客户端或者是拥有EditorToken的情况下，就会对Application进行创建。
 
 既然他们的创建时在引擎主循环中创建的，那是不是意味着输入检测也是在主循环中呢？我们回到`FSlateApplication`的声明当中，还记得其中有一个函数就是负责进行输入检测的吗？就是`FSlateApplication::PollGameDeviceState()`，同样的，我们来看看这个函数在哪里被调用了。
-![alt text](./images/PollGameDeviceState.png)
+![alt text](./Images/PollGameDeviceState.png)
 结果非常的简单，甚至不需要我们一个个排除，其代码段如下所示：
 ```cpp
 void FEngineLoop::Tick() {
@@ -1510,7 +1510,7 @@ SButton::FArgument::OnPressed(FSimpleDelegate::CreateUObject(this, &ThisClass::S
 好了，现在我们已经知道了这个用来传递给`SButton`用来初始化的参数是通过首先构建一个对应的`FArgument`，紧接着通过将这个构建好的Argument传递给对应的`void Construct(const FArguments& InArgs)`函数从而将输入事件的绑定传递到`SWidget`层级的了，简单的用一张图来表示就是：
 
 <div align="center">
-  <img src="./images/SWidget构建流程图.png">
+  <img src="./Images/SWidget构建流程图.png">
 </div>
 
 ### 输入事件从Slate传递到UMG
@@ -1552,12 +1552,12 @@ void UButton::SlateHandlePressed() {
 无图无真相，就直接来看一下引擎当中处理UI输入的调用堆栈。
 我们直接在引擎的`UButton`中处理OnPressed事件的函数中打一个断点
 <div align="center">
-  <img src="./images/OnPressedBreakpoint.png">
+  <img src="./Images/OnPressedBreakpoint.png">
 </div>
 
 随便点击项目中的一个按钮，我们能看到到达`UButton::SlateHandlePressed`之前的调用堆栈：
 <div align="center">
-  <img src="./images/PressedCallStack.png">
+  <img src="./Images/PressedCallStack.png">
 </div>
 
 可以看到，除开接收消息处理这一块，大体上和我们所设想的差不多——在每一帧中都会主动处理输入消息、然后将消息发送到`FSlateApplication`中对应的事件当中、再根据`FEventRouter::Route`函数来遍历焦点路径中的每一个SlateWidget、最后通过委托把输入事件通知到UWidget层级以调用我们所绑定的事件。
@@ -1685,5 +1685,5 @@ int32 FWindowsApplication::ProcessDeferredMessage( const FDeferredWindowsMessage
 ### 总结
 用一幅图总结一下，从按键输入到UI响应，总共需要以下的一些步骤：
 <div align="center">
-  <img src="./images/输入处理流程.jpg">
+  <img src="./Images/输入处理流程.jpg">
 </div>
